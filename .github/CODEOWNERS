@@ -1,0 +1,17 @@
+# CODEOWNERS - Define quién es responsable de cada parte del código
+# Sintaxis: <ruta> <owner>
+# El primer patrón que coincide determina el owner
+
+# Owner principal para todo el repositorio
+* @dgartu
+
+# Owner específico para archivos de configuración
+package.json @dgartu
+package-lock.json @dgartu
+
+# Owner para el código fuente
+index.js @dgartu
+
+# Owner para documentación
+README.md @dgartu
+docs/ @dgartu
