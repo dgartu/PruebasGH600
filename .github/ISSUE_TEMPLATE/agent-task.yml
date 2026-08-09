@@ -1,0 +1,34 @@
+# .github/ISSUE_TEMPLATE/agent-task.yml
+name: Agent task
+description: Tarea estructurada para asignar a Copilot coding agent
+title: "[agent] "
+labels: ["agent-task"]
+body:
+  - type: textarea
+    id: context
+    attributes:
+      label: Contexto
+      description: Qué hay hoy y por qué hace falta el cambio
+    validations:
+      required: true
+  - type: textarea
+    id: inputs
+    attributes:
+      label: Inputs disponibles
+      description: Archivos, env vars, comandos relevantes
+    validations:
+      required: true
+  - type: textarea
+    id: outputs
+    attributes:
+      label: Outputs esperados
+      description: Qué artefactos debe producir
+    validations:
+      required: true
+  - type: textarea
+    id: dod
+    attributes:
+      label: Definition of done
+      description: Cómo verificamos que terminó OK
+    validations:
+      required: true
