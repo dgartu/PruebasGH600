@@ -1,8 +1,11 @@
 name: "Code Review con Poolside: Laguna S 2.1"
 
 on:
-  pull_request:
-    branches: [main]
+  # pull_request_target permite usar el secreto también en PRs provenientes
+  # de forks. El workflow nunca ejecuta el código de la PR: solo lee su diff.
+  pull_request_target:
+    branches: [master]
+    types: [labeled, synchronize]
     paths:
       - '**.js'
       - '**.ts'
@@ -10,49 +13,79 @@ on:
 
 jobs:
   code-review:
+    # La etiqueta ai-review actúa como selector. Solo el propietario puede
+    # activar la revisión para evitar que terceros consuman la API key.
+    if: >-
+      github.actor == github.repository_owner &&
+      (
+        (github.event.action == 'labeled' && github.event.label.name == 'ai-review') ||
+        (github.event.action == 'synchronize' && contains(github.event.pull_request.labels.*.name, 'ai-review'))
+      )
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
-      - name: Checkout código
-        uses: actions/checkout@v4
-
-      - name: Configurar Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20.x'
-          cache: 'npm'
-
-      - name: Instalar dependencias
-        run: npm ci
-
-      - name: "Revisar código con Poolside: Laguna S 2.1"
-        uses: openrouter-ai/openrouter-github-action@v1
-        with:
-          api-key: ${{ secrets.OPENROUTER_API_KEY }}
-          model: 'poolside/laguna-s-2.1:free'
-          prompt: |
-            Eres un revisor de código experto. Revisa el siguiente código JavaScript/TypeScript y proporciona:
-            1. Problemas de calidad del código
-            2. Posibles bugs o errores
-            3. Mejoras de rendimiento
-            4. Buenas prácticas que faltan
-            5. Sugerencias de refactorización
-
-            Código a revisar:
-            ${{ github.event.pull_request.diff_url }}
-
-            Proporciona un resumen conciso y accionable de tus hallazgos.
-          max-tokens: 2000
-          temperature: 0.3
-
-      - name: Comentar en el PR
+      - name: "Revisar PR con Poolside: Laguna S 2.1"
         uses: actions/github-script@v7
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         with:
           script: |
-            const fs = require('fs');
-            const review = fs.readFileSync('review-output.md', 'utf8');
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: `## Revisión de código con Poolside: Laguna S 2.1\n\n${review}`
+            const pullNumber = context.payload.pull_request.number;
+            const { owner, repo } = context.repo;
+
+            const { data: diff } = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: pullNumber,
+              mediaType: { format: 'diff' }
+            });
+
+            const prompt = `Eres un revisor de código experto. Revisa este diff de una PR.
+
+            Devuelve una revisión concisa y accionable en español con:
+            1. Problemas críticos o bugs, solo si están respaldados por el diff.
+            2. Riesgos de seguridad o rendimiento.
+            3. Mejoras de calidad y mantenibilidad.
+            4. Una conclusión indicando si no encontraste problemas relevantes.
+
+            No inventes archivos ni comportamiento que no aparezcan en el diff.
+
+            PR #${pullNumber}: ${context.payload.pull_request.title}
+
+            Diff:
+            ${diff}`;
+
+            const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+                'Content-Type': 'application/json',
+                'X-Title': 'PruebasGH600 code review'
+              },
+              body: JSON.stringify({
+                model: 'poolside/laguna-s-2.1:free',
+                messages: [{ role: 'user', content: prompt }],
+                max_tokens: 2000,
+                temperature: 0.3
+              })
+            });
+
+            if (!response.ok) {
+              throw new Error(`OpenRouter respondió ${response.status}: ${await response.text()}`);
+            }
+
+            const result = await response.json();
+            const review = result.choices?.[0]?.message?.content;
+            if (!review) {
+              throw new Error('OpenRouter no devolvió contenido de revisión.');
+            }
+
+            await github.rest.pulls.createReview({
+              owner,
+              repo,
+              pull_number: pullNumber,
+              body: `## Revisión con Poolside: Laguna S 2.1\n\n${review}`,
+              event: 'COMMENT'
             });
