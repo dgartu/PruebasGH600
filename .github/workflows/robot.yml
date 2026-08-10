@@ -62,7 +62,7 @@ jobs:
             - Archivos en src/ exportan por nombre, nunca default
             - Tests en tests/<area>.spec.ts
 
-            Después de commitear y pushear, abrí un PR DRAFT (draft: true) contra main,
+            Después de commitear y pushear, abrí un PR DRAFT (draft: true) contra master,
             con título descriptivo y body que incluya "Closes #${{ github.event.issue.number }}".
 
           max-tokens: 4000
