@@ -178,13 +178,23 @@ jobs:
               const prTitle = payload.prTitle || `bot: ${issue?.title ?? 'Implementación de issue #' + issueNumber}`;
               const prBody = `Implementación automatizada por Poolside: Laguna S 2.1.\n\nCloses #${issueNumber}`;
 
-              await github.rest.pulls.create({
-                owner,
-                repo,
-                title: prTitle,
-                body: prBody,
-                head: branchName,
-                base: defaultBranch,
-                draft: true
-              });
+              try {
+                await github.rest.pulls.create({
+                  owner,
+                  repo,
+                  title: prTitle,
+                  body: prBody,
+                  head: branchName,
+                  base: defaultBranch,
+                  draft: true
+                });
+              } catch (prErr) {
+                const compareUrl = `https://github.com/${owner}/${repo}/compare/${defaultBranch}...${branchName}?expand=1`;
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: issueNumber,
+                  body: `⚠️ **Aviso de Permisos de GitHub Actions**:\nLos cambios de código se subieron correctamente a la rama \`${branchName}\`, pero GitHub bloqueó la creación automática de la PR.\n\n👉 **Para solucionarlo**: Ve en GitHub a **Settings ⚙️ -> Actions -> General -> Workflow permissions** y marca la casilla **"Allow GitHub Actions to create and approve pull requests"**.\n\n🔗 **Crear PR manualmente**: [Abrir PR en GitHub](${compareUrl})`
+                });
+              }
             }
