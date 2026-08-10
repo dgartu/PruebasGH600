@@ -1,4 +1,4 @@
-name: Code Review con Poolside: Laguna S 2.1
+name: "Code Review con Poolside: Laguna S 2.1"
 
 on:
   pull_request:
@@ -24,7 +24,7 @@ jobs:
       - name: Instalar dependencias
         run: npm ci
 
-      - name: Revisar código con Poolside: Laguna S 2.1
+      - name: "Revisar código con Poolside: Laguna S 2.1"
         uses: openrouter-ai/openrouter-github-action@v1
         with:
           api-key: ${{ secrets.OPENROUTER_API_KEY }}

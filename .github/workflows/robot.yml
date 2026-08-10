@@ -1,5 +1,5 @@
 # .github/workflows/robot.yml
-name: Poolside: Laguna S 2.1
+name: "Poolside: Laguna S 2.1"
 
 on:
   issue_comment:
@@ -41,7 +41,7 @@ jobs:
           cache: 'npm'
       - name: Instalar dependencias
         run: npm ci
-      - name: Ejecutar Poolside: Laguna S 2.1
+      - name: "Ejecutar Poolside: Laguna S 2.1"
         uses: openrouter-ai/openrouter-github-action@v1
         with:
           api-key: ${{ secrets.OPENROUTER_API_KEY }}
