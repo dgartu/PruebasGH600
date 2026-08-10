@@ -22,20 +22,29 @@ jobs:
         (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@robot')) ||
         (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@robot')) ||
         (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@robot')) ||
-        (github.event_name == 'issues' && (contains(github.event.issue.body, '@robot') || contains(github.event.issue.title, '@robot')))
+        (github.event_name == 'issues' && (contains(github.event.issue.body, '@robot') || contains(github.event.issue.title, '@robot') || github.event.action == 'assigned' || github.event_name == 'issues'))
       )
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       pull-requests: write
       issues: write
     steps:
-      - name: "Ejecutar Poolside: Laguna S 2.1"
+      - name: "Checkout del repositorio"
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: "Ejecutar Poolside: Laguna S 2.1 (Plan + Implementación + PR)"
         uses: actions/github-script@v7
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         with:
           script: |
+            const fs = require('fs');
+            const path = require('path');
+            const { execSync } = require('child_process');
+
             const { owner, repo } = context.repo;
             const issueNumber = context.payload.issue?.number ?? context.payload.pull_request?.number;
             const issue = context.payload.issue ?? context.payload.pull_request;
@@ -52,31 +61,54 @@ jobs:
               diff = String(response.data).slice(0, 50000);
             }
 
-            const prompt = `Eres Poolside: Laguna S 2.1, un asistente experto de codificación.
-            Responde en español y ayuda con la solicitud descrita abajo.
+            // Escanear código del proyecto para incluir contexto
+            function getProjectFiles(dir = '.', list = []) {
+              if (!fs.existsSync(dir)) return list;
+              const files = fs.readdirSync(dir);
+              for (const f of files) {
+                if (f === 'node_modules' || f === '.git' || f === 'package-lock.json' || f === '.github') continue;
+                const fullPath = path.join(dir, f);
+                const stat = fs.statSync(fullPath);
+                if (stat.isDirectory()) {
+                  getProjectFiles(fullPath, list);
+                } else if (/\.(ts|js|json|md)$/i.test(f)) {
+                  list.push({ path: fullPath, content: fs.readFileSync(fullPath, 'utf8') });
+                }
+              }
+              return list;
+            }
 
-            Convenciones del repositorio:
-            - TypeScript estricto.
-            - Módulos ESM.
-            - Tests con vitest; no agregues otra librería de tests.
-            - Archivos en src/ exportan por nombre, nunca default.
-            - Tests en tests/<area>.spec.ts.
+            const projectFiles = getProjectFiles('.');
+            let codeContext = projectFiles.map(f => `--- ${f.path} ---\n${f.content}`).join('\n\n');
+            if (codeContext.length > 25000) {
+              codeContext = codeContext.slice(0, 25000) + '\n... (contenido truncado)';
+            }
 
-            Importante: esta integración solo puede responder en un comentario.
-            No afirmes que has editado archivos, creado commits o abierto PRs.
-            Proporciona un análisis, una propuesta concreta y, si procede, código
-            o pasos que una persona pueda aplicar y verificar.
+            const prompt = `### ROL Y OBJETIVO
+Eres un desarrollador senior automatizado encargado de analizar e implementar la siguiente tarea en el repositorio.
 
-            Issue o PR #${issueNumber}: ${issue?.title ?? '(sin título)'}
+### ARCHIVOS DEL REPOSITORIO
+${codeContext}
 
-            Descripción:
-            ${issue?.body ?? '(sin descripción)'}
+### CONTEXTO DEL ISSUE
+- **Número y Título**: Issue #${issueNumber}: ${issue?.title ?? '(Sin título)'}
+- **Descripción**:
+${issue?.body ?? '(Sin descripción)'}
 
-            Solicitud mencionada:
-            ${comment}
-
-            Diff de la PR, si existe:
-            ${diff || '(no aplica)'}`;
+${comment ? `- **Comentario / Instrucción Adicional**:\n${comment}\n` : ''}${diff ? `- **Diff de PR existente**:\n${diff}\n` : ''}
+### FORMATO DE RESPUESTA REQUERIDO
+Debes responder ÚNICAMENTE con un objeto JSON válido (sin texto ni bloques Markdown adicionales fuera del JSON) con la siguiente estructura:
+{
+  "plan": "Explicación detallada en Markdown del análisis y la solución que se comentará en el issue",
+  "commitMessage": "Mensaje descriptivo para el commit",
+  "prTitle": "Título descriptivo para el Pull Request",
+  "files": [
+    {
+      "path": "ruta/relativa/del/archivo.ts",
+      "content": "contenido completo del archivo nuevo o modificado"
+    }
+  ]
+}`;
 
             const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
               method: 'POST',
@@ -89,7 +121,7 @@ jobs:
                 model: 'poolside/laguna-s-2.1:free',
                 messages: [{ role: 'user', content: prompt }],
                 max_tokens: 4000,
-                temperature: 0.7
+                temperature: 0.2
               })
             });
 
@@ -98,14 +130,61 @@ jobs:
             }
 
             const result = await response.json();
-            const answer = result.choices?.[0]?.message?.content;
-            if (!answer) {
-              throw new Error('OpenRouter no devolvió contenido.');
+            const rawAnswer = result.choices?.[0]?.message?.content ?? '';
+
+            let payload;
+            try {
+              const jsonMatch = rawAnswer.match(/\{[\s\S]*\}/);
+              payload = JSON.parse(jsonMatch ? jsonMatch[0] : rawAnswer);
+            } catch (e) {
+              payload = { plan: rawAnswer, files: [] };
             }
 
-            await github.rest.issues.createComment({
-              owner,
-              repo,
-              issue_number: issueNumber,
-              body: `## Poolside: Laguna S 2.1\n\n${answer}`
-            });
+            // 1. Publicar plan como comentario en el issue/PR
+            if (payload.plan) {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: issueNumber,
+                body: `## Poolside: Laguna S 2.1 (Plan e Implementación)\n\n${payload.plan}`
+              });
+            }
+
+            // 2. Aplicar cambios de código, commit, push y crear Draft PR si hay archivos
+            if (payload.files && Array.isArray(payload.files) && payload.files.length > 0) {
+              const branchName = `bot/issue-${issueNumber}-${Date.now().toString().slice(-4)}`;
+              
+              execSync('git config user.name "github-actions[bot]"');
+              execSync('git config user.email "github-actions[bot]@users.noreply.github.com"');
+              execSync(`git checkout -b ${branchName}`);
+
+              for (const file of payload.files) {
+                if (!file.path || typeof file.content !== 'string') continue;
+                const dir = path.dirname(file.path);
+                if (dir && dir !== '.') {
+                  fs.mkdirSync(dir, { recursive: true });
+                }
+                fs.writeFileSync(file.path, file.content, 'utf8');
+              }
+
+              execSync('git add .');
+              const commitMsg = payload.commitMessage || `feat: implement issue #${issueNumber}`;
+              execSync(`git commit -m "${commitMsg.replace(/"/g, '\\"')}"`);
+              execSync(`git push origin ${branchName}`);
+
+              const repoInfo = await github.rest.repos.get({ owner, repo });
+              const defaultBranch = repoInfo.data.default_branch || 'master';
+
+              const prTitle = payload.prTitle || `bot: ${issue?.title ?? 'Implementación de issue #' + issueNumber}`;
+              const prBody = `Implementación automatizada por Poolside: Laguna S 2.1.\n\nCloses #${issueNumber}`;
+
+              await github.rest.pulls.create({
+                owner,
+                repo,
+                title: prTitle,
+                body: prBody,
+                head: branchName,
+                base: defaultBranch,
+                draft: true
+              });
+            }
