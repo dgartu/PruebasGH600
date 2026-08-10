@@ -1,0 +1,58 @@
+name: "Code Review con Poolside: Laguna S 2.1"
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '**.js'
+      - '**.ts'
+      - '**.json'
+
+jobs:
+  code-review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: "Revisar código con Poolside: Laguna S 2.1"
+        uses: openrouter-ai/openrouter-github-action@v1
+        with:
+          api-key: ${{ secrets.OPENROUTER_API_KEY }}
+          model: 'poolside/laguna-s-2.1:free'
+          prompt: |
+            Eres un revisor de código experto. Revisa el siguiente código JavaScript/TypeScript y proporciona:
+            1. Problemas de calidad del código
+            2. Posibles bugs o errores
+            3. Mejoras de rendimiento
+            4. Buenas prácticas que faltan
+            5. Sugerencias de refactorización
+
+            Código a revisar:
+            ${{ github.event.pull_request.diff_url }}
+
+            Proporciona un resumen conciso y accionable de tus hallazgos.
+          max-tokens: 2000
+          temperature: 0.3
+
+      - name: Comentar en el PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const review = fs.readFileSync('review-output.md', 'utf8');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## Revisión de código con Poolside: Laguna S 2.1\n\n${review}`
+            });
