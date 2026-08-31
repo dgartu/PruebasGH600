@@ -1,0 +1,17 @@
+// .mcp.json en la raíz del repo gh600-lab.
+// Tanto Claude Code (CLI) como claude-code-action lo levantan al arrancar.
+// Paths relativos a la raíz del repo (no a la cwd del usuario): el cliente
+// lanza el subproceso desde la raíz, así que "mcp/notes-server/notes.db"
+// resuelve correctamente. Evitamos ${workspaceFolder} porque es una
+// convención de VS Code y el CLI standalone NO la expande.
+{
+  "mcpServers": {
+    "notes": {
+      "command": "node",
+      "args": ["mcp/notes-server/dist/server.js"],
+      "env": {
+        "NOTES_DB": "mcp/notes-server/notes.db"
+      }
+    }
+  }
+}
