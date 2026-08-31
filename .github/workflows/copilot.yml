@@ -46,7 +46,7 @@ jobs:
         uses: actions/github-script@v7
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          OPENROUTER_MODEL: ${{ vars.OPENROUTER_MODEL || 'anthropic/claude-3.5-sonnet' }}
+          OPENROUTER_MODEL: ${{ vars.OPENROUTER_MODEL || 'poolside/laguna-s-2.1:free' }}
           GITHUB_TOKEN: ${{ secrets.USER_PAT || secrets.GITHUB_TOKEN }}
           USER_ACTOR: ${{ github.actor }}
         with:
