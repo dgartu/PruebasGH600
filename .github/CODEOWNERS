@@ -1,17 +1,23 @@
-# CODEOWNERS - Define quién es responsable de cada parte del código
-# Sintaxis: <ruta> <owner>
-# El primer patrón que coincide determina el owner
+# CODEOWNERS - Define quién mantiene cada parte del código
+# El primer patrón que coincide gana (el orden importa)
 
-# Owner principal para todo el repositorio
+# Todo el repositorio → dgartu
 * @dgartu
 
-# Owner específico para archivos de configuración
-package.json @dgartu
-package-lock.json @dgartu
+# Archivos de configuración → dgartu
+.gitignore @dgartu
+.github/ @dgartu
 
-# Owner para el código fuente
+# Código fuente → dgartu
+src/ @dgartu
 index.js @dgartu
 
-# Owner para documentación
-README.md @dgartu
+# Tests → dgartu
+tests/ @dgartu
+
+# Documentación → dgartu
 docs/ @dgartu
+README.md @dgartu
+
+# MCP Notes Server → dgartu
+mcp/ @dgartu
